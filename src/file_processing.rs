@@ -1,5 +1,6 @@
 use crate::{
     args::Interface,
+    clip,
     config::ProcessingContext,
     data_access::DataAccess,
     database::ImageAnalysisResult,
@@ -12,6 +13,20 @@ use crate::{
 };
 use futures::stream::{self, StreamExt};
 use log::error;
+
+/// Extract the "Tags: ..." line from a description. Returns None if no tags line found.
+pub fn extract_tags(description: &str) -> Option<String> {
+    for line in description.lines() {
+        let trimmed = line.trim();
+        if let Some(tags) = trimmed.strip_prefix("Tags:").or_else(|| trimmed.strip_prefix("tags:")) {
+            let tags = tags.trim();
+            if !tags.is_empty() {
+                return Some(tags.to_string());
+            }
+        }
+    }
+    None
+}
 use reqwest::Client;
 use std::{
     path::{Path, PathBuf},
@@ -146,6 +161,27 @@ async fn process_file(
         .update_description(&analysis.asset_id, &analysis.description)
         .await?;
 
+    // Extract tags and embed each one separately into tag_search.
+    // Per-tag embeddings give strong, narrow matches — a query like "toad" scores 1.0
+    // against its exact tag instead of being diluted across a blended embedding.
+    if let Some(clip_url) = ctx.clip_url {
+        if let Some(tags_str) = extract_tags(&analysis.description) {
+            let tags: Vec<&str> = tags_str.split(',').map(|t| t.trim()).filter(|t| !t.is_empty()).collect();
+            for tag in tags {
+                match clip::encode_text(http_client, clip_url, ctx.clip_model_name, tag, timeout).await {
+                    Ok(embedding) => {
+                        let _ = data_access
+                            .upsert_tag_embedding(&analysis.asset_id, tag, &embedding)
+                            .await;
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to encode tag '{}' for {}: {} (non-fatal)", tag, analysis.asset_id, e);
+                    }
+                }
+            }
+        }
+    }
+
     Ok(analysis)
 }
 
@@ -192,6 +228,8 @@ pub async fn process_files_concurrently(
         let timeout = args.timeout;
         let ollama_manager = ollama_manager.clone();
         let llamacpp_manager = llamacpp_manager.clone();
+        let clip_url = args.clip_url.clone();
+        let clip_model_name = args.clip_model_name.clone();
 
         async move {
             rust_i18n::set_locale(&lang);
@@ -235,6 +273,8 @@ pub async fn process_files_concurrently(
                 timeout,
                 ollama_manager: ollama_manager.as_ref(),
                 llamacpp_manager: llamacpp_manager.as_ref(),
+                clip_url: clip_url.as_deref(),
+                clip_model_name: &clip_model_name,
             };
 
             let result = if overwrite_existing {

@@ -127,6 +127,24 @@ pub async fn process_new_file(
             data_access
                 .update_description(&analysis.asset_id, &analysis.description)
                 .await?;
+
+            // Extract tags and embed each one separately into tag_search
+            if let Some(clip_url) = ctx.clip_url {
+                if let Some(tags_str) = crate::file_processing::extract_tags(&analysis.description) {
+                    let tags: Vec<&str> = tags_str.split(',').map(|t| t.trim()).filter(|t| !t.is_empty()).collect();
+                    for tag in tags {
+                        match crate::clip::encode_text(http_client, clip_url, ctx.clip_model_name, tag, config.request_timeout).await {
+                            Ok(embedding) => {
+                                let _ = data_access.upsert_tag_embedding(&analysis.asset_id, tag, &embedding).await;
+                            }
+                            Err(e) => {
+                                log::warn!("Failed to encode tag '{}' for {}: {} (non-fatal)", tag, analysis.asset_id, e);
+                            }
+                        }
+                    }
+                }
+            }
+
             println!(
                 "{}",
                 rust_i18n::t!("monitor.database_updated", filename = filename)
@@ -315,6 +333,8 @@ pub async fn monitor_folder(
                                                     timeout: file_processing_config.request_timeout,
                                                     ollama_manager: ollama_manager_clone.as_ref(),
                                                     llamacpp_manager: llamacpp_manager_clone.as_ref(),
+                                                    clip_url: config_clone.clip_url.as_deref(),
+                                                    clip_model_name: &config_clone.clip_model_name,
                                                 };
                                                 let result = process_new_file(
                                                     &ctx,
@@ -452,6 +472,8 @@ pub async fn monitor_folder(
                                                 timeout: config_clone.timeout,
                                                 ollama_manager: ollama_manager_clone.as_ref(),
                                                 llamacpp_manager: llamacpp_manager_clone.as_ref(),
+                                                clip_url: config_clone.clip_url.as_deref(),
+                                                clip_model_name: &config_clone.clip_model_name,
                                             };
 
                                             let file_processing_config = FileProcessingConfig {

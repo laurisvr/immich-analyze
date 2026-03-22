@@ -21,7 +21,6 @@ COPY src/ ./src/
 COPY locales/ ./locales/
 
 RUN cargo build --release --locked
-
 # Stage 2: Final runtime image
 FROM debian:bullseye-slim
 

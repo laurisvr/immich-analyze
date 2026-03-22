@@ -214,6 +214,25 @@ impl DataAccess {
         }
     }
 
+    /// Upserts a single tag embedding into the tag_search table.
+    /// Only works in database mode; silently skipped in API mode.
+    pub async fn upsert_tag_embedding(
+        &self,
+        asset_id: &Uuid,
+        tag: &str,
+        embedding: &str,
+    ) -> Result<(), ImageAnalysisError> {
+        match self {
+            Self::Database { client, .. } => {
+                crate::database::upsert_tag_embedding(client, *asset_id, tag, embedding).await
+            }
+            Self::ImmichApi { .. } => {
+                log::debug!("Tag embedding update not supported in API mode");
+                Ok(())
+            }
+        }
+    }
+
     pub async fn cleanup_preview(&self, path: &PathBuf) -> Result<(), ImageAnalysisError> {
         if matches!(self, Self::ImmichApi { .. }) {
             tokio::fs::remove_file(path).await.ok();

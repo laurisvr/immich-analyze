@@ -3,6 +3,7 @@ use std::{path::Path, sync::Arc};
 use tokio_postgres::NoTls;
 
 mod args;
+mod clip;
 mod config;
 mod data_access;
 mod database;
@@ -147,6 +148,8 @@ async fn run_monitor_mode(
         api_key: args.api_key.clone(),
         unavailable_duration: args.unavailable_duration,
         api_poll_interval: args.api_poll_interval,
+        clip_url: args.clip_url.clone(),
+        clip_model_name: args.clip_model_name.clone(),
     };
     monitor_folder(
         &args.model_name,

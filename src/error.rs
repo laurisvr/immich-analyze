@@ -38,4 +38,6 @@ pub enum ImageAnalysisError {
     InvalidConfig { error: String },
     #[error("HTTP client error: {error}")]
     HttpClientError { error: String },
+    #[error("CLIP encoding error: {error}")]
+    ClipEncodingError { error: String },
 }

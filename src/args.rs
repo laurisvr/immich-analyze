@@ -84,4 +84,10 @@ pub struct Args {
     /// Interface language (ru, en)
     #[arg(long, default_value = "")]
     pub lang: String,
+    /// Immich ML URL for CLIP text encoding of descriptions (e.g. http://immich-machine-learning:3003)
+    #[arg(long, env = "IMMICH_ANALYZE_CLIP_URL")]
+    pub clip_url: Option<String>,
+    /// CLIP model name for text encoding (must match Immich's configured model)
+    #[arg(long, env = "IMMICH_ANALYZE_CLIP_MODEL", default_value = "ViT-B-32__openai")]
+    pub clip_model_name: String,
 }

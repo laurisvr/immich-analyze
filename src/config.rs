@@ -26,6 +26,8 @@ pub struct MonitorConfig {
     pub api_key: Option<String>,
     pub unavailable_duration: u64,
     pub api_poll_interval: u64,
+    pub clip_url: Option<String>,
+    pub clip_model_name: String,
 }
 
 #[derive(Clone, Copy)]
@@ -37,4 +39,6 @@ pub struct ProcessingContext<'a> {
     pub timeout: u64,
     pub ollama_manager: Option<&'a Arc<OllamaHostManager>>,
     pub llamacpp_manager: Option<&'a Arc<LlamaCppHostManager>>,
+    pub clip_url: Option<&'a str>,
+    pub clip_model_name: &'a str,
 }

@@ -82,6 +82,14 @@ if [[ "$IMMICH_ANALYZE_API_POLL_INTERVAL" =~ ^[0-9]+$ ]]; then
     args+=("--api-poll-interval" "$IMMICH_ANALYZE_API_POLL_INTERVAL")
 fi
 
+if [ -n "$IMMICH_ANALYZE_CLIP_URL" ]; then
+    args+=("--clip-url" "$IMMICH_ANALYZE_CLIP_URL")
+fi
+
+if [ -n "$IMMICH_ANALYZE_CLIP_MODEL" ]; then
+    args+=("--clip-model-name" "$IMMICH_ANALYZE_CLIP_MODEL")
+fi
+
 echo "Running immich-analyze with args: ${args[@]}"
 
 # Execute with proper signal handling

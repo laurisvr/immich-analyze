@@ -178,6 +178,50 @@ pub async fn update_or_create_asset_description(
     }
 }
 
+/// Validate that a string is a valid pgvector literal.
+fn is_valid_embedding(embedding: &str) -> bool {
+    embedding.starts_with('[')
+        && embedding.ends_with(']')
+        && embedding[1..embedding.len() - 1]
+            .chars()
+            .all(|c| c.is_ascii_digit() || c == '.' || c == '-' || c == ',' || c == 'e' || c == 'E' || c == '+')
+}
+
+/// Upsert a single tag embedding into the tag_search table.
+pub async fn upsert_tag_embedding(
+    client: &PgClient,
+    asset_id: Uuid,
+    tag: &str,
+    embedding: &str,
+) -> Result<(), ImageAnalysisError> {
+    if !is_valid_embedding(embedding) {
+        return Err(ImageAnalysisError::ClipEncodingError {
+            error: "Invalid embedding format".to_string(),
+        });
+    }
+
+    let safe_tag = tag.replace('\'', "''");
+    let query = format!(
+        r#"INSERT INTO tag_search ("assetId", tag, embedding) VALUES ('{}', '{}', '{}')
+           ON CONFLICT ("assetId", tag) DO UPDATE SET embedding = EXCLUDED.embedding"#,
+        asset_id, safe_tag, embedding
+    );
+
+    match client.execute(&query, &[]).await {
+        Ok(_) => {
+            log::debug!("Upserted tag '{}' embedding for asset: {}", tag, asset_id);
+            Ok(())
+        }
+        Err(e) => {
+            log::warn!(
+                "Failed to upsert tag '{}' for {}: {}",
+                tag, asset_id, e
+            );
+            Ok(()) // Non-fatal
+        }
+    }
+}
+
 pub async fn check_database_connection(client: &PgClient) -> Result<bool, ImageAnalysisError> {
     let timeout_duration = std::time::Duration::from_secs(5);
     match tokio::time::timeout(timeout_duration, client.query("SELECT 1", &[])).await {
