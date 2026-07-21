@@ -222,6 +222,47 @@ pub async fn upsert_tag_embedding(
     }
 }
 
+/// Delete tag rows for an asset that are not in the new tag set, so
+/// re-analysis replaces the old tags instead of accumulating them.
+/// Runs before the per-tag upserts: embeddings are deterministic per tag
+/// text, so rows kept for still-present tags remain valid even if their
+/// re-encode later fails.
+pub async fn delete_stale_tags(
+    client: &PgClient,
+    asset_id: Uuid,
+    keep_tags: &[&str],
+) -> Result<(), ImageAnalysisError> {
+    let keep_array = if keep_tags.is_empty() {
+        "ARRAY[]::text[]".to_string()
+    } else {
+        format!(
+            "ARRAY[{}]",
+            keep_tags
+                .iter()
+                .map(|t| format!("'{}'", t.replace('\'', "''")))
+                .collect::<Vec<_>>()
+                .join(",")
+        )
+    };
+    let query = format!(
+        r#"DELETE FROM tag_search WHERE "assetId" = '{}' AND tag <> ALL ({})"#,
+        asset_id, keep_array
+    );
+
+    match client.execute(&query, &[]).await {
+        Ok(n) => {
+            if n > 0 {
+                log::debug!("Deleted {} stale tag(s) for asset: {}", n, asset_id);
+            }
+            Ok(())
+        }
+        Err(e) => {
+            log::warn!("Failed to delete stale tags for {}: {}", asset_id, e);
+            Ok(()) // Non-fatal
+        }
+    }
+}
+
 pub async fn check_database_connection(client: &PgClient) -> Result<bool, ImageAnalysisError> {
     let timeout_duration = std::time::Duration::from_secs(5);
     match tokio::time::timeout(timeout_duration, client.query("SELECT 1", &[])).await {

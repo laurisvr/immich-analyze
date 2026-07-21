@@ -214,6 +214,24 @@ impl DataAccess {
         }
     }
 
+    /// Deletes tag rows for an asset that are not in the new tag set.
+    /// Only works in database mode; silently skipped in API mode.
+    pub async fn delete_stale_tags(
+        &self,
+        asset_id: &Uuid,
+        keep_tags: &[&str],
+    ) -> Result<(), ImageAnalysisError> {
+        match self {
+            Self::Database { client, .. } => {
+                crate::database::delete_stale_tags(client, *asset_id, keep_tags).await
+            }
+            Self::ImmichApi { .. } => {
+                log::debug!("Stale tag cleanup not supported in API mode");
+                Ok(())
+            }
+        }
+    }
+
     /// Upserts a single tag embedding into the tag_search table.
     /// Only works in database mode; silently skipped in API mode.
     pub async fn upsert_tag_embedding(

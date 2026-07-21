@@ -132,6 +132,7 @@ pub async fn process_new_file(
             if let Some(clip_url) = ctx.clip_url {
                 if let Some(tags_str) = crate::file_processing::extract_tags(&analysis.description) {
                     let tags: Vec<&str> = tags_str.split(',').map(|t| t.trim()).filter(|t| !t.is_empty()).collect();
+                    let _ = data_access.delete_stale_tags(&analysis.asset_id, &tags).await;
                     for tag in tags {
                         match crate::clip::encode_text(http_client, clip_url, ctx.clip_model_name, tag, config.request_timeout).await {
                             Ok(embedding) => {
