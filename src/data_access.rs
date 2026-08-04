@@ -214,6 +214,28 @@ impl DataAccess {
         }
     }
 
+    /// Checks whether an asset still exists.
+    ///
+    /// # Database mode
+    /// Queries the `asset` table via `SELECT EXISTS`.
+    ///
+    /// # API mode
+    /// Sends `GET /api/assets/{id}` and treats 404 (or 400 "Not found") as gone.
+    ///
+    /// # Arguments
+    /// * `asset_id` - UUID of the target asset
+    ///
+    /// # Returns
+    /// `true` if the asset exists, `false` if it has been deleted.
+    pub async fn asset_exists(&self, asset_id: &Uuid) -> Result<bool, ImageAnalysisError> {
+        match self {
+            Self::Database { client, .. } => {
+                crate::database::check_asset_exists(client, *asset_id).await
+            }
+            Self::ImmichApi { provider } => provider.asset_exists(asset_id).await,
+        }
+    }
+
     /// Deletes tag rows for an asset that are not in the new tag set.
     /// Only works in database mode; silently skipped in API mode.
     pub async fn delete_stale_tags(

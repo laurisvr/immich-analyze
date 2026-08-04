@@ -90,9 +90,17 @@ pub fn get_immich_preview_files(immich_root: &Path) -> Result<Vec<PathBuf>, Imag
     Ok(preview_files)
 }
 
-async fn process_file_with_existing_check(
+/// Run the cheap database checks before spending an AI request on an image.
+///
+/// The existence check applies regardless of `overwrite_existing`: deleted
+/// assets leave their preview file behind in `thumbs/`, so every scan
+/// rediscovers them. Without this the image is analysed in full and only then
+/// rejected by the description write, burning one AI request per orphaned
+/// thumbnail on every pass.
+async fn process_file_checked(
     ctx: &ProcessingContext<'_>,
     path: &Path,
+    overwrite_existing: bool,
 ) -> Result<ImageAnalysisResult, ImageAnalysisError> {
     let filename = path
         .file_name()
@@ -101,7 +109,11 @@ async fn process_file_with_existing_check(
         .to_string();
     let asset_id = extract_uuid_from_preview_filename(&filename)?;
 
-    if ctx.data_access.has_description(&asset_id).await? {
+    if !ctx.data_access.asset_exists(&asset_id).await? {
+        return Err(ImageAnalysisError::AssetNotFound { asset_id });
+    }
+
+    if !overwrite_existing && ctx.data_access.has_description(&asset_id).await? {
         return Err(ImageAnalysisError::AlreadyProcessed { filename });
     }
     process_file(ctx, path).await
@@ -278,11 +290,7 @@ pub async fn process_files_concurrently(
                 clip_model_name: &clip_model_name,
             };
 
-            let result = if overwrite_existing {
-                process_file(&ctx, &path).await
-            } else {
-                process_file_with_existing_check(&ctx, &path).await
-            };
+            let result = process_file_checked(&ctx, &path, overwrite_existing).await;
             {
                 let mut progress_guard = progress.lock().await;
                 progress_guard
@@ -349,6 +357,19 @@ fn handle_error_result(filename: &str, error: &ImageAnalysisError) -> (&'static 
                 rust_i18n::t!("status.skipped"),
                 filename,
                 rust_i18n::t!("main.file_already_in_database", filename = filename),
+                "-".repeat(80)
+            ),
+        ),
+        ImageAnalysisError::AssetNotFound { asset_id } => (
+            "skipped",
+            format!(
+                "{} [{}] {}\n{}",
+                rust_i18n::t!("status.skipped"),
+                filename,
+                rust_i18n::t!(
+                    "database.asset_not_in_table",
+                    asset_id = asset_id.to_string()
+                ),
                 "-".repeat(80)
             ),
         ),

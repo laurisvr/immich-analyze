@@ -84,6 +84,19 @@ pub async fn process_new_file(
     );
     let asset_id = extract_uuid_from_preview_filename(&filename)?;
 
+    // A thumbnail can outlive its asset, so confirm the asset is still there
+    // before spending an AI request on it.
+    if !data_access.asset_exists(&asset_id).await? {
+        println!(
+            "{}",
+            rust_i18n::t!(
+                "database.asset_not_in_table",
+                asset_id = asset_id.to_string()
+            )
+        );
+        return Err(ImageAnalysisError::AssetNotFound { asset_id });
+    }
+
     if !config.overwrite_existing && data_access.has_description(&asset_id).await? {
         println!(
             "{}",
@@ -348,13 +361,17 @@ pub async fn monitor_folder(
                                                     files.remove(&filename_clone);
                                                 }
                                                 if let Err(e) = result {
-                                                    if let ImageAnalysisError::AlreadyProcessed { filename: _ } = e {
-                                                        // Expected when ignoring existing files
-                                                    } else {
-                                                        error!(
-                                                            "{}",
-                                                            rust_i18n::t!("error.background_processing_error", filename = filename_clone)
-                                                        );
+                                                    match e {
+                                                        // Expected when ignoring existing files or
+                                                        // when the asset has already been deleted
+                                                        ImageAnalysisError::AlreadyProcessed { .. }
+                                                        | ImageAnalysisError::AssetNotFound { .. } => {}
+                                                        _ => {
+                                                            error!(
+                                                                "{}",
+                                                                rust_i18n::t!("error.background_processing_error", filename = filename_clone)
+                                                            );
+                                                        }
                                                     }
                                                 }
                                             });
@@ -500,13 +517,17 @@ pub async fn monitor_folder(
                                             }
 
                                             if let Err(e) = result {
-                                                if let ImageAnalysisError::AlreadyProcessed { .. } = e {
-                                                    // Expected when ignoring existing files
-                                                } else {
-                                                    error!(
-                                                        "{}",
-                                                        rust_i18n::t!("error.background_processing_error", filename = asset_id.to_string())
-                                                    );
+                                                match e {
+                                                    // Expected when ignoring existing files or
+                                                    // when the asset has already been deleted
+                                                    ImageAnalysisError::AlreadyProcessed { .. }
+                                                    | ImageAnalysisError::AssetNotFound { .. } => {}
+                                                    _ => {
+                                                        error!(
+                                                            "{}",
+                                                            rust_i18n::t!("error.background_processing_error", filename = asset_id.to_string())
+                                                        );
+                                                    }
                                                 }
                                             }
                                         });

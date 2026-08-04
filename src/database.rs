@@ -37,6 +37,34 @@ pub async fn asset_has_description(
     }
 }
 
+/// Check if an asset still exists in the asset table.
+///
+/// A preview file in `thumbs/` is not proof that the asset is still there:
+/// Immich does not always remove the thumbnail when an asset is deleted, so
+/// the filesystem scan keeps rediscovering orphaned previews on every pass.
+pub async fn check_asset_exists(
+    client: &PgClient,
+    asset_id: Uuid,
+) -> Result<bool, ImageAnalysisError> {
+    let query = "SELECT EXISTS (SELECT 1 FROM asset WHERE id = $1::uuid)";
+    let asset_id_str = asset_id.to_string();
+    match client.query_one(query, &[&asset_id_str]).await {
+        Ok(row) => Ok(row.get(0)),
+        Err(e) => {
+            eprintln!(
+                "{}",
+                rust_i18n::t!(
+                    "database.asset_existence_check_error",
+                    error = e.to_string()
+                )
+            );
+            Err(ImageAnalysisError::DatabaseError {
+                error: e.to_string(),
+            })
+        }
+    }
+}
+
 /// Update or create asset description in database
 pub async fn update_or_create_asset_description(
     client: &PgClient,

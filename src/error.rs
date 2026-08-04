@@ -1,4 +1,5 @@
 use thiserror::Error;
+use uuid::Uuid;
 
 #[derive(Debug, Error)]
 pub enum ImageAnalysisError {
@@ -40,4 +41,6 @@ pub enum ImageAnalysisError {
     HttpClientError { error: String },
     #[error("CLIP encoding error: {error}")]
     ClipEncodingError { error: String },
+    #[error("Asset not found: {asset_id}")]
+    AssetNotFound { asset_id: Uuid },
 }

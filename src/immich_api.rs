@@ -368,6 +368,51 @@ impl ImmichApiProvider {
         Ok(())
     }
 
+    /// Checks whether an asset still exists via API.
+    ///
+    /// # Arguments
+    /// * `asset_id` - UUID of the asset
+    ///
+    /// # Returns
+    /// `true` on a 2xx response, `false` on 404 (or 400 with a "Not found" body).
+    /// Any other failure is reported as an error rather than assumed deleted, so
+    /// a transient API problem never causes a live asset to be skipped.
+    pub async fn asset_exists(&self, asset_id: &Uuid) -> Result<bool, ImageAnalysisError> {
+        let url = self
+            .base_url
+            .join(&format!("/api/assets/{}", asset_id))
+            .map_err(|e| ImageAnalysisError::InvalidConfig {
+                error: e.to_string(),
+            })?;
+
+        let response =
+            self.client
+                .get(url)
+                .send()
+                .await
+                .map_err(|e| ImageAnalysisError::HttpError {
+                    status: 0,
+                    filename: asset_id.to_string(),
+                    response: e.to_string(),
+                })?;
+
+        if response.status().is_success() {
+            return Ok(true);
+        }
+
+        let status = response.status().as_u16();
+        let body = response.text().await.unwrap_or_default();
+        if status == 404 || (status == 400 && body.contains("Not found")) {
+            return Ok(false);
+        }
+
+        Err(ImageAnalysisError::HttpError {
+            status,
+            filename: asset_id.to_string(),
+            response: body,
+        })
+    }
+
     /// Checks if an asset already has a description via API.
     ///
     /// # Arguments
