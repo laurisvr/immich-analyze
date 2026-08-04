@@ -5,6 +5,7 @@ use std::{path::Path, sync::Arc};
 use tokio_postgres::NoTls;
 
 mod args;
+mod clip;
 mod config;
 mod data_access;
 mod database;

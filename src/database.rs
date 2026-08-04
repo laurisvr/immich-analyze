@@ -323,6 +323,78 @@ pub async fn get_asset_metadata(
     })
 }
 
+/// Validate that a string is a well-formed pgvector literal.
+///
+/// The embedding reaches the query as a bound text parameter, so this is a sanity
+/// check on the ML container's output rather than an injection guard.
+fn is_valid_embedding(embedding: &str) -> bool {
+    embedding
+        .strip_prefix('[')
+        .and_then(|rest| rest.strip_suffix(']'))
+        .is_some_and(|body| {
+            !body.is_empty()
+                && body.chars().all(|chr| {
+                    chr.is_ascii_digit() || matches!(chr, '.' | '-' | '+' | ',' | 'e' | 'E' | ' ')
+                })
+        })
+}
+
+/// Upsert a single tag embedding into the `tag_search` table.
+///
+/// Errors are logged and swallowed: the description has already been stored by this
+/// point, so a failure here degrades tag search rather than failing the analysis.
+pub async fn upsert_tag_embedding(
+    client: &PgClient,
+    asset_id: Uuid,
+    tag: &str,
+    embedding: &str,
+) -> Result<(), ImageAnalysisError> {
+    if !is_valid_embedding(embedding) {
+        return Err(ImageAnalysisError::ClipEncodingError {
+            error: "Invalid embedding format".to_owned(),
+        });
+    }
+
+    // `$3::text::vector` rather than `$3::vector`: the latter makes Postgres infer the
+    // parameter as `vector`, which tokio-postgres cannot serialize a `&str` into. The
+    // double cast pins the parameter to text while still storing it as a vector.
+    let query = "INSERT INTO tag_search (\"assetId\", tag, embedding) \
+                 VALUES ($1, $2, $3::text::vector) \
+                 ON CONFLICT (\"assetId\", tag) DO UPDATE SET embedding = EXCLUDED.embedding";
+
+    match client.execute(query, &[&asset_id, &tag, &embedding]).await {
+        Ok(_) => {
+            debug!("Upserted tag '{tag}' embedding for asset: {asset_id}");
+            Ok(())
+        }
+        Err(err) => Err(ImageAnalysisError::DatabaseError {
+            error: format_error_chain(&err),
+        }),
+    }
+}
+
+/// Delete tag rows for an asset that are not in the new tag set, so re-analysis
+/// replaces the old tags instead of accumulating them.
+pub async fn delete_stale_tags(
+    client: &PgClient,
+    asset_id: Uuid,
+    keep_tags: &[&str],
+) -> Result<(), ImageAnalysisError> {
+    let query = "DELETE FROM tag_search WHERE \"assetId\" = $1 AND tag <> ALL($2::text[])";
+
+    match client.execute(query, &[&asset_id, &keep_tags]).await {
+        Ok(deleted) => {
+            if deleted > 0 {
+                debug!("Deleted {deleted} stale tag(s) for asset: {asset_id}");
+            }
+            Ok(())
+        }
+        Err(err) => Err(ImageAnalysisError::DatabaseError {
+            error: format_error_chain(&err),
+        }),
+    }
+}
+
 pub async fn check_database_connection(client: &PgClient) -> Result<bool, ImageAnalysisError> {
     let timeout_duration = std::time::Duration::from_secs(5);
     match tokio::time::timeout(timeout_duration, client.query("SELECT 1", &[])).await {

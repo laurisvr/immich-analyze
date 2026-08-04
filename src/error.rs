@@ -41,6 +41,8 @@ pub enum ImageAnalysisError {
     IoError { path: String, error: String },
     #[error("Asset not found: {asset_id}")]
     AssetNotFound { asset_id: Uuid },
+    #[error("CLIP encoding error: {error}")]
+    ClipEncodingError { error: String },
 }
 
 impl ImageAnalysisError {
@@ -97,7 +99,8 @@ impl ImageAnalysisError {
             ),
             Self::InvalidImmichStructure { error }
             | Self::InvalidConfig { error }
-            | Self::HttpClientError { error } => format!(
+            | Self::HttpClientError { error }
+            | Self::ClipEncodingError { error } => format!(
                 "{}\n{}",
                 rust_i18n::t!("error.critical_processing_error", filename = "unknown"),
                 error
@@ -141,7 +144,10 @@ impl ImageAnalysisError {
             | Self::ProcessingError { .. }
             | Self::FileWriteTimeout { .. }
             | Self::IoError { .. }
-            | Self::AssetNotFound { .. } => false,
+            | Self::AssetNotFound { .. }
+            // Tag embedding runs after the description is stored and never fails the
+            // analysis, so retrying the whole asset on a CLIP failure would be wasteful.
+            | Self::ClipEncodingError { .. } => false,
         }
     }
 }

@@ -140,6 +140,14 @@ if [[ "$IMMICH_ANALYZE_WAIT_RETRY_INTERVAL" =~ ^[0-9]+$ ]]; then
     args+=("--wait-retry-interval" "$IMMICH_ANALYZE_WAIT_RETRY_INTERVAL")
 fi
 
+if [ -n "$IMMICH_ANALYZE_CLIP_URL" ]; then
+    args+=("--clip-url" "$IMMICH_ANALYZE_CLIP_URL")
+fi
+
+if [ -n "$IMMICH_ANALYZE_CLIP_MODEL" ]; then
+    args+=("--clip-model-name" "$IMMICH_ANALYZE_CLIP_MODEL")
+fi
+
 echo "Running immich-analyze with args: ${args[@]}"
 
 # Execute with proper signal handling

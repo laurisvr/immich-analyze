@@ -122,6 +122,9 @@ pub async fn process_new_file(
             data_access
                 .update_description(&analysis.asset_id, &final_description)
                 .await?;
+
+            crate::clip::store_description_tags(data_access, ctx.clip, &analysis).await;
+
             println!(
                 "{}",
                 rust_i18n::t!("monitor.database_updated", filename = filename)
@@ -380,6 +383,7 @@ fn handle_fs_events(
                                 config_clone.enrich_prompt,
                                 config_clone.preserve_human,
                                 config_clone.disable_ai_wrapper,
+                                config_clone.clip.as_ref(),
                             );
                             let result = process_new_file(
                                 &ctx,
@@ -505,6 +509,7 @@ async fn handle_api_poll(
                             config_clone.enrich_prompt,
                             config_clone.preserve_human,
                             config_clone.disable_ai_wrapper,
+                            config_clone.clip.as_ref(),
                         );
 
                         let result = process_new_file(

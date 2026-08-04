@@ -5,6 +5,28 @@ use crate::{
 };
 use std::num::NonZeroU32;
 
+/// Settings for per-tag CLIP encoding against the Immich ML container.
+///
+/// Absent (`None`) whenever no CLIP URL is configured, which disables tag embedding
+/// entirely and leaves description generation untouched.
+#[derive(Debug, Clone)]
+pub struct ClipConfig {
+    pub url: String,
+    pub model_name: String,
+    pub timeout: u64,
+}
+
+impl ClipConfig {
+    #[must_use]
+    pub fn from_args(args: &Args) -> Option<Self> {
+        args.clip_url.as_ref().map(|url| Self {
+            url: url.clone(),
+            model_name: args.clip_model_name.clone(),
+            timeout: args.timeout,
+        })
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct MonitorConfig {
     pub file_write_timeout: u64,
@@ -23,6 +45,7 @@ pub struct MonitorConfig {
     pub enrich_prompt: bool,
     pub preserve_human: bool,
     pub disable_ai_wrapper: bool,
+    pub clip: Option<ClipConfig>,
 }
 
 impl MonitorConfig {
@@ -45,6 +68,7 @@ impl MonitorConfig {
             enrich_prompt: args.enrich_prompt,
             preserve_human: args.preserve_human,
             disable_ai_wrapper: args.disable_ai_wrapper,
+            clip: ClipConfig::from_args(args),
         }
     }
 }
@@ -58,10 +82,15 @@ pub struct ProcessingContext<'a> {
     pub enrich_prompt: bool,
     pub preserve_human: bool,
     pub disable_ai_wrapper: bool,
+    pub clip: Option<&'a ClipConfig>,
 }
 
 impl<'a> ProcessingContext<'a> {
     #[must_use]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "context aggregates per-run settings; a builder would add more noise than it removes"
+    )]
     pub const fn new(
         data_access: &'a DataAccess,
         prompt: &'a str,
@@ -70,6 +99,7 @@ impl<'a> ProcessingContext<'a> {
         enrich_prompt: bool,
         preserve_human: bool,
         disable_ai_wrapper: bool,
+        clip: Option<&'a ClipConfig>,
     ) -> Self {
         Self {
             data_access,
@@ -79,6 +109,7 @@ impl<'a> ProcessingContext<'a> {
             enrich_prompt,
             preserve_human,
             disable_ai_wrapper,
+            clip,
         }
     }
 }

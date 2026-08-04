@@ -1,5 +1,5 @@
 use crate::{
-    config::ProcessingContext,
+    config::{ClipConfig, ProcessingContext},
     data_access::DataAccess,
     database::ImageAnalysisResult,
     error::ImageAnalysisError,
@@ -126,6 +126,8 @@ async fn process_file(
         .update_description(&analysis.asset_id, &final_description)
         .await?;
 
+    crate::clip::store_description_tags(data_access, ctx.clip, &analysis).await;
+
     Ok(analysis)
 }
 
@@ -152,8 +154,11 @@ pub async fn process_files_concurrently(
         args.api_key.clone(),
     ));
 
+    let clip_config = ClipConfig::from_args(args);
+
     stream::iter(assets.into_iter().map(|asset| {
         let prompt = args.prompt.clone();
+        let clip = clip_config.clone();
         let progress_clone = Arc::clone(&progress);
         let lang = locale.to_owned();
         let overwrite_policy = args.effective_overwrite_policy();
@@ -194,6 +199,7 @@ pub async fn process_files_concurrently(
                 args.enrich_prompt,
                 args.preserve_human,
                 args.disable_ai_wrapper,
+                clip.as_ref(),
             );
 
             let result = process_file_with_existing_check(&ctx, &preview_path).await;

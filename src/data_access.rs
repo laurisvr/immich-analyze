@@ -4,6 +4,7 @@ use crate::utils::{
     extract_uuid_from_preview_filename, filename_from_path, format_error_chain, is_preview_filename,
 };
 use clap::ValueEnum;
+use log::debug;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio_postgres::Client as PgClient;
@@ -285,6 +286,43 @@ impl DataAccess {
                 crate::database::asset_has_description(client, *asset_id).await
             }
             Self::ImmichApi { provider } => provider.has_description(asset_id).await,
+        }
+    }
+
+    /// Upserts a single tag embedding into the `tag_search` table.
+    ///
+    /// Database mode only: `tag_search` is a fork-local table with no REST equivalent,
+    /// so this is a no-op in API mode.
+    pub async fn upsert_tag_embedding(
+        &self,
+        asset_id: &Uuid,
+        tag: &str,
+        embedding: &str,
+    ) -> Result<(), ImageAnalysisError> {
+        match self {
+            Self::Database { client, .. } => {
+                crate::database::upsert_tag_embedding(client, *asset_id, tag, embedding).await
+            }
+            Self::ImmichApi { .. } => {
+                debug!("Tag embedding storage is not supported in API mode");
+                Ok(())
+            }
+        }
+    }
+
+    /// Removes tag rows for an asset that are absent from `keep_tags`.
+    ///
+    /// Database mode only, for the same reason as `upsert_tag_embedding`.
+    pub async fn delete_stale_tags(
+        &self,
+        asset_id: &Uuid,
+        keep_tags: &[&str],
+    ) -> Result<(), ImageAnalysisError> {
+        match self {
+            Self::Database { client, .. } => {
+                crate::database::delete_stale_tags(client, *asset_id, keep_tags).await
+            }
+            Self::ImmichApi { .. } => Ok(()),
         }
     }
 

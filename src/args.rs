@@ -140,6 +140,17 @@ pub struct Args {
     /// Port for health check HTTP server (0 to disable)
     #[arg(long, default_value_t = 3000)]
     pub health_port: u16,
+    /// Immich ML URL for CLIP text encoding of description tags
+    /// (e.g. `http://immich-machine-learning:3003`). Tag embedding is disabled when unset.
+    #[arg(long, env = "IMMICH_ANALYZE_CLIP_URL")]
+    pub clip_url: Option<String>,
+    /// CLIP model name for text encoding (must match Immich's configured model)
+    #[arg(
+        long,
+        env = "IMMICH_ANALYZE_CLIP_MODEL",
+        default_value = "ViT-B-32__openai"
+    )]
+    pub clip_model_name: String,
 }
 
 impl Args {
