@@ -46,7 +46,11 @@ pub async fn check_asset_exists(
     client: &PgClient,
     asset_id: Uuid,
 ) -> Result<bool, ImageAnalysisError> {
-    let query = "SELECT EXISTS (SELECT 1 FROM asset WHERE id = $1::uuid)";
+    // The double cast is deliberate. `id = $1::uuid` makes Postgres infer the
+    // parameter as uuid, which tokio-postgres cannot serialize a String into
+    // (this build has no uuid feature). `$1::text::uuid` pins the parameter to
+    // text while still comparing as uuid, so asset_pkey is used.
+    let query = "SELECT EXISTS (SELECT 1 FROM asset WHERE id = $1::text::uuid)";
     let asset_id_str = asset_id.to_string();
     match client.query_one(query, &[&asset_id_str]).await {
         Ok(row) => Ok(row.get(0)),
