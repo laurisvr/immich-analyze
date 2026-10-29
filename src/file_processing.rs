@@ -152,6 +152,7 @@ pub async fn process_files_concurrently(
         Duration::from_secs(args.retry_delay_seconds),
         unavailable_duration,
         args.api_key.clone(),
+        args.max_concurrent,
     ));
 
     let clip_config = ClipConfig::from_args(args);

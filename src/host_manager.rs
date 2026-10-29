@@ -16,6 +16,7 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
+use tokio::sync::Semaphore;
 
 impl Interface {
     /// Returns the API endpoint path for the given interface.
@@ -104,6 +105,9 @@ pub struct HostManager {
     unavailable_hosts: Arc<Mutex<HashMap<String, Instant>>>,
     unavailable_duration: Duration,
     api_key: Option<String>,
+    /// Caps in-flight AI requests across every caller sharing this manager. Monitor mode
+    /// spawns one task per new asset, so without it a large upload sends them all at once.
+    request_slots: Arc<Semaphore>,
 }
 
 impl HostManager {
@@ -118,8 +122,10 @@ impl HostManager {
         retry_delay: Duration,
         unavailable_duration: Duration,
         api_key: Option<String>,
+        max_concurrent: usize,
     ) -> Self {
         Self {
+            request_slots: Arc::new(Semaphore::new(max_concurrent.max(1))),
             hosts,
             interface,
             client,
@@ -243,6 +249,13 @@ impl HostManager {
                         return Err(err);
                     }
                 };
+
+                // Held for this request only, so retry sleeps don't occupy a slot.
+                let _slot = self
+                    .request_slots
+                    .acquire()
+                    .await
+                    .expect("request semaphore is never closed");
 
                 let url = format!("{}{}", host.trim_end_matches('/'), endpoint);
                 info!("Making {:?} request to: {}", self.interface, url);

@@ -189,6 +189,7 @@ pub async fn monitor_folder(
         Duration::from_secs(config.retry_delay_seconds),
         unavailable_duration,
         config.api_key.clone(),
+        config.max_concurrent,
     ));
 
     let bg_ctx = BackgroundCtx {
